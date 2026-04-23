@@ -125,58 +125,19 @@
       position: absolute;
     }
     
+    /* Hiding all developer text logs / UI overlay text from plain sight 
+      as requested, keeping the design clean! 
+    */
     .status {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.8);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 14px;
-      z-index: 1001;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-    
-    .status.visible {
-      opacity: 1;
+      display: none !important;
     }
     
     .loading-indicator {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      font-size: 16px;
-      opacity: 1;
-      transition: opacity 0.5s ease;
-    }
-    
-    .loading-indicator.hidden {
-      opacity: 0;
+      display: none !important;
     }
     
     .device-info {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: rgba(255,255,255,0.1);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px;
-      color: white;
-      padding: 8px 12px;
-      font-size: 12px;
-      z-index: 1000;
-      opacity: 0;
-      transition: opacity 0.4s ease;
-    }
-    
-    .device-info.visible {
-      opacity: 1;
+      display: none !important;
     }
     
     @media (max-width: 768px) {
@@ -195,7 +156,6 @@
 </head>
 <body>
   <div id="video-container">
-    <!-- Removed static source tag, JS will handle the HLS playlist now -->
     <video id="main-video" playsinline crossorigin="anonymous" preload="metadata"></video>
     
     <div class="loading-indicator" id="loading">Loading lattergas stream...</div>
@@ -228,6 +188,11 @@
       { isPressed: false, pressStartTime: 0, longPressTriggered: false },
       { isPressed: false, pressStartTime: 0, longPressTriggered: false }
     ];
+    
+    // Clap state variables
+    let clapStart = 0;
+    const CLAP_DIST = 0.15; // 15 cm distance
+    const CLAP_TIME = 6000; // 6 seconds
     
     // DOM elements
     const mainVideo = document.getElementById('main-video');
@@ -660,6 +625,7 @@
         state.pressStartTime = 0;
         state.longPressTriggered = false;
       });
+      clapStart = 0;
       
       // Pause video and show overlay
       if (isPlaying) {
@@ -669,6 +635,34 @@
       videoOverlay.classList.remove('hidden');
       
       showStatus('Exited AR mode');
+    }
+    
+    // Clap to close logic
+    function checkClap() {
+      if (controllers.length < 2) { 
+        clapStart = 0; 
+        return; 
+      }
+      
+      const c1 = controllers[0];
+      const c2 = controllers[1];
+
+      // Make sure controllers are actually tracked and moved off the 0,0,0 origin
+      if (c1.position.lengthSq() === 0 && c2.position.lengthSq() === 0) {
+        clapStart = 0; 
+        return;
+      }
+
+      if (c1.position.distanceTo(c2.position) <= CLAP_DIST) {
+        if (!clapStart) {
+          clapStart = Date.now();
+        } else if (Date.now() - clapStart >= CLAP_TIME) {
+          exitImmersiveMode();
+          clapStart = 0; // reset
+        }
+      } else {
+        clapStart = 0;
+      }
     }
     
     function render(timestamp, frame) {
@@ -707,6 +701,9 @@
           euler.z = 0; // Remove roll
           videoMesh.quaternion.setFromEuler(euler);
         }
+        
+        // Check for "Clap to Close" gesture
+        checkClap();
       }
       
       renderer.render(scene, camera);
